@@ -193,6 +193,10 @@ EXPOSE 6379
 # Switch to the non-root user before starting the application
 USER appuser
 
+
+RUN mkdir -p /home/appuser/tmp && chmod 1777 /home/appuser/tmp
+ENV TMPDIR=/home/appuser/tmp
+
 # Set environment variables to ptoduction
 ENV PYTHON_ENV=production 
 
