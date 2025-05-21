@@ -2,46 +2,36 @@
 """
 Crawl4AI FastAPI entry‑point
 • Browser pool + global page cap
-• Rate‑limiting, security
+• Rate‑limiting (in-memory), security
 • /crawl endpoint
 """
 
 # ── stdlib & 3rd‑party imports ───────────────────────────────
 from crawler_pool import get_crawler, close_all, janitor
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
-from auth import get_token_dependency # Assuming TokenRequest and create_access_token are not needed
+from auth import get_token_dependency
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from fastapi import Request, Depends
-# Removed: FileResponse, base64, re
-from api import handle_crawl_request # Removed: handle_markdown_request, handle_llm_qa, handle_stream_crawl_request, stream_results
-from utils import load_config, setup_logging # Removed: FilterType, verify_email_domain
+from api import handle_crawl_request
+from utils import load_config, setup_logging
 import os
 import sys
-import time # Kept for health/timestamp, but health endpoint removed. Can be removed if not used elsewhere.
+import time
 import asyncio
 from contextlib import asynccontextmanager
-# Removed: pathlib
 
 from fastapi import (
-    FastAPI, HTTPException, Request, Depends # Removed: Path, Query
+    FastAPI, HTTPException, Request, Depends
 )
-# Removed: rank_bm25
 
-# Removed: chunk_code_functions (first definition)
-
-from fastapi.responses import JSONResponse # Removed: StreamingResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-# Removed: StaticFiles
-
-# Removed: mcp_bridge imports (attach_mcp, mcp_resource, mcp_template, mcp_tool)
-# Removed: ast import
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-# Removed: prometheus_fastapi_instrumentator
-from redis import asyncio as aioredis
+# Removed: from redis import asyncio as aioredis
 
 # ── internal imports (after sys.path append) ─────────────────
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
@@ -50,13 +40,11 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 config = load_config()
 setup_logging(config)
 
-__version__ = "0.5.1-d1" # Kept, though no endpoint uses it directly now
+__version__ = "0.5.1-d1"
 
 # ── global page semaphore (hard cap) ─────────────────────────
 MAX_PAGES = config["crawler"]["pool"].get("max_pages", 30)
 GLOBAL_SEM = asyncio.Semaphore(MAX_PAGES)
-
-# Removed: commented out page_log and older capped_arun implementation
 
 orig_arun = AsyncWebCrawler.arun
 
@@ -85,22 +73,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── static playground ──────────────────────────────────────
-# Removed: STATIC_DIR and app.mount for "/playground"
-# Removed: root endpoint redirecting to playground
-
 # ─────────────────── infra / middleware  ─────────────────────
-redis_url = config["redis"].get("uri", "redis://localhost")
-# Ensure redis_url is not None before creating the pool
-if redis_url is None:
-    raise ValueError("Redis URI is not configured. Please set config['redis']['uri']")
-redis = aioredis.from_url(redis_url)
+# Removed: Redis client initialization (redis_url, redis = aioredis.from_url(redis_url))
 
-
+# Setup Limiter to use default in-memory storage
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=[config["rate_limiting"]["default_limit"]],
-    storage_uri=config["rate_limiting"].get("storage_uri"), # slowapi uses this directly
+    default_limits=[config["rate_limiting"]["default_limit"]]
+    # Removed: storage_uri parameter, so slowapi defaults to MemoryStorage
 )
 
 
@@ -117,8 +97,6 @@ def _setup_security(app_: FastAPI):
 
 _setup_security(app)
 
-# Removed: Prometheus Instrumentator
-
 token_dep = get_token_dependency(config)
 
 
@@ -129,36 +107,18 @@ async def add_security_headers(request: Request, call_next):
         resp.headers.update(config["security"]["headers"])
     return resp
 
-# ───────────────── safe config‑dump helper ─────────────────
-# Removed: ALLOWED_TYPES and _safe_eval_config function
-
 # ───────────────────────── Schemas ───────────────────────────
 class CrawlRequest(BaseModel):
     urls: List[str] = Field(min_length=1, max_length=100)
     browser_config: Optional[Dict] = Field(default_factory=dict)
     crawler_config: Optional[Dict] = Field(default_factory=dict)
 
-# Removed: MarkdownRequest, RawCode, HTMLRequest, ScreenshotRequest, PDFRequest, JSEndpointRequest schemas
-
 # ──────────────────────── Endpoints ──────────────────────────
-
-# Removed: /token endpoint
-# Removed: /config/dump endpoint
-# Removed: /md endpoint
-# Removed: /html endpoint
-# Removed: /screenshot endpoint
-# Removed: /pdf endpoint
-# Removed: /execute_js endpoint
-# Removed: /llm/{url:path} endpoint
-# Removed: /schema endpoint
-# Removed: health endpoint
-# Removed: metrics endpoint (Prometheus)
 
 @app.post("/crawl")
 @limiter.limit(config["rate_limiting"]["default_limit"])
-# Removed: @mcp_tool("crawl")
 async def crawl(
-    request: Request, # request parameter is kept as limiter might use it, or for general consistency
+    request: Request,
     crawl_request: CrawlRequest,
     _td: Dict = Depends(token_dep),
 ):
@@ -174,13 +134,6 @@ async def crawl(
         config=config,
     )
     return JSONResponse(res)
-
-# Removed: /crawl/stream endpoint
-# Removed: chunk_code_functions (second definition)
-# Removed: chunk_doc_sections function
-# Removed: /ask endpoint
-
-# Removed: attach_mcp layer and print statement for MCP server
 
 # ────────────────────────── cli ──────────────────────────────
 if __name__ == "__main__":
